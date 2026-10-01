@@ -3,17 +3,21 @@ import unicodedata
 import pytesseract
 import re
 from PIL import Image
+from collections.abc import Callable
 
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+resolve_confusion = str.maketrans({"B":"8","O":"0","I":"1","L":"1"})
 
 def abrir_arquivo(arquivo: str) -> pymupdf.Document:
     doc = pymupdf.open(arquivo)
     return doc
 
-def normalizar(s: str) -> str: # José, Sep-28
-    s = unicodedata.normalize("NFD", s) # José -> Jose´, Sep-28 
-    s = "".join(c for c in s if unicodedata.category(c) != "Mn") # Jose´ -> Jose, Sep-28
-    return "".join(c for c in s.upper() if c.isalnum()) # Jose -> JOSE, Sep-28 -> SEP28
+def normalizar(s: str) -> str:                                   # Lívia   lívia   Iívia   LÍVIA
+    s = unicodedata.normalize("NFD", s)                          # Li´via  li´via  Ii´via  LI´VIA
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn") # Livia   livia   Iivia   LIVIA
+    s = "".join(c for c in s.upper() if c.isalnum())             # LIVIA   LIVIA   IIVIA   LIVIA
+    return s.translate(resolve_confusion)                        # 11V1A   11V1A   11V1A   11V1A
 
 def ocr_palavras(page: pymupdf.Page, dpi: int = 400, limite: int = 170, psm: int = 11, margem: float = 1.5,) -> list[tuple[pymupdf.Rect, str]]:
     pix = page.get_pixmap(dpi=dpi, colorspace=pymupdf.csGRAY) # Renderiza a página em escala de cinza
@@ -41,7 +45,7 @@ def ocr_palavras(page: pymupdf.Page, dpi: int = 400, limite: int = 170, psm: int
 
 def buscar_termo(palavras: list[tuple[pymupdf.Rect, str]], termo: str) -> list[pymupdf.Rect]:
     alvo = [normalizar(p) for p in re.findall(r"\w+", termo)]
-    textos = [normalizar(t) for _, t in palavras]
+    textos = [normalizar(t) for _, t in palavras]  
     n = len(alvo)
 
     areas = []
@@ -50,9 +54,10 @@ def buscar_termo(palavras: list[tuple[pymupdf.Rect, str]], termo: str) -> list[p
             areas.extend(rect for rect, _ in palavras[i:i + n])
     return areas
 
-def censurar_dados(doc: pymupdf.Document, termos: list[str], saida: str) -> None:
+def censurar_dados(doc: pymupdf.Document, termos: list[str], saida: str, log: Callable[[str], None] = print, ao_avancar: Callable[[int, int], None] | None = None) -> None:
+    total = doc.page_count
     for page in doc:
-        print(f"Página [{page.number}]")
+        log(f"Página {page.number +1} de {total}")
         
         palavras = None
 
@@ -60,6 +65,7 @@ def censurar_dados(doc: pymupdf.Document, termos: list[str], saida: str) -> None
             print("Página sem texto, aplicando OCR...")
         
             palavras = ocr_palavras(page)
+            print(palavras)
 
         for termo in termos:
             areas = page.search_for(termo)
@@ -77,6 +83,9 @@ def censurar_dados(doc: pymupdf.Document, termos: list[str], saida: str) -> None
 
         # Uma vez por página, depois de marcar todos os termos
         page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_PIXELS)
+
+        if ao_avancar:
+            ao_avancar(page.number + 1, total)
 
     doc.scrub() # Limpa os metadados
     doc.save(saida, garbage=4, deflate=True) # Garbage limpa o pdf, deflate comprime streams

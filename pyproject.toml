@@ -13,7 +13,7 @@ dependencies = [
     "pytesseract>=0.3.13",
 ]
 
-[project.scripts]
+[project.gui-scripts]
 pdf-anonymizer = "pdf_anonymizer.main:main"
 
 [build-system]

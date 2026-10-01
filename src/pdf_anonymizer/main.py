@@ -1,10 +1,4 @@
-from pdf_anonymizer.anonymizer import censurar_dados, abrir_arquivo
+from pdf_anonymizer.gui import main as abrir_interface
 
 def main() -> None:
-    
-    arquivo = r".pdf"
-    arquivo_censurado = ".pdf"
-    dados = []
-
-    doc = abrir_arquivo(arquivo)
-    censurar_dados(doc,dados,arquivo_censurado)
+    abrir_interface()
