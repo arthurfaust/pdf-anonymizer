@@ -1,11 +1,23 @@
+import os
+import sys
 import pymupdf
 import unicodedata
 import pytesseract
 import re
+from pathlib import Path
 from PIL import Image
 from collections.abc import Callable
 
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+def _pasta_tesseract() -> Path:
+    # Empacotado pelo PyInstaller: usa o Tesseract que vai junto com o programa
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "tesseract"
+    # Rodando pelo código-fonte: usa o Tesseract instalado
+    return Path(r"C:\Program Files\Tesseract-OCR")
+
+_pasta = _pasta_tesseract()
+pytesseract.pytesseract.tesseract_cmd = str(_pasta / "tesseract.exe")
+os.environ["TESSDATA_PREFIX"] = str(_pasta / "tessdata")
 
 tabela_traducao = str.maketrans({"B":"8","O":"0","I":"1","L":"1"})
 
