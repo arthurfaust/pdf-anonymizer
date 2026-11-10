@@ -82,13 +82,13 @@ Ou abra o `PDF Anonymizer.exe`, se estiver usando o executável.
 
 Na janela:
 
-1. Clique em **Selecionar PDFs...** e escolha um ou mais arquivos.
+1. Clique em **Adicionar PDFs…** e escolha um ou mais arquivos, ou arraste os PDFs para a área de arquivos.
 
-2. Opcionalmente, clique em **Selecionar pasta de saída...** para escolher onde os arquivos censurados serão salvos. Se nenhuma pasta for escolhida, eles são salvos na mesma pasta dos originais.
+2. Opcionalmente, clique em **Alterar…**, ao lado de **Salvar em**, para escolher onde os arquivos censurados serão salvos. Por padrão, eles são salvos na mesma pasta dos originais. Use **Usar pasta dos originais** para voltar a esse comportamento.
 
 3. Preencha os dados a ocultar nos campos de cada categoria: nome, sobrenome, contato, identificador, conta ou cartão, endereço e outros dados. Os textos em cinza dentro dos campos são apenas exemplos e não são usados.
 
-4. Use o botão **+** ao lado de um campo para criar outro campo logo abaixo, na mesma categoria. Campos vazios são ignorados.
+4. Use **+ Adicionar** ou pressione **Enter** em um campo para criar outro na mesma categoria. Use **✕** para remover um campo. Campos vazios são ignorados.
 
 5. Clique em **Anonimizar** e acompanhe o andamento pela barra de progresso.
 
@@ -96,7 +96,9 @@ As categorias servem apenas para organizar o preenchimento. Todos os dados preen
 
 Cada arquivo censurado recebe o sufixo `_censurado` (por exemplo, `extrato.pdf` gera `extrato_censurado.pdf`). Se já existir um arquivo com esse nome no destino, ele é substituído. Atenção: se você escolher uma pasta de saída e selecionar dois PDFs com o mesmo nome vindos de pastas diferentes, o segundo substitui o primeiro.
 
-O processamento roda em segundo plano, então a janela continua respondendo durante o OCR. Se um arquivo falhar, os demais continuam sendo processados, e os erros são listados na mensagem final.
+O processamento roda em segundo plano, então a janela continua respondendo durante o OCR. Se um arquivo falhar, os demais continuam sendo processados. Ao final, use **Ver erros** para consultar as falhas e **Abrir pasta** para acessar os resultados.
+
+A interface padrão usa Qt (PySide6) e permite alternar o **Tema escuro**. A interface anterior em Tkinter continua disponível pelo comando `uv run pdf-anonymizer --gui=antiga`.
 
 ### Uso como biblioteca
 
@@ -128,29 +130,52 @@ O executável é gerado com o [PyInstaller](https://pyinstaller.org/) e inclui u
 
 **1. Copie o Tesseract para o projeto.** Crie a pasta `vendor\tesseract` e copie para ela todo o conteúdo de `C:\Program Files\Tesseract-OCR`. Para reduzir o tamanho, apague de `vendor\tesseract\tessdata` os arquivos `.traineddata` de outros idiomas, mantendo o `por.traineddata`. **Não apague as subpastas `configs` e `tessconfigs`**: o OCR depende delas.
 
-**2. Instale o PyInstaller** como dependência de desenvolvimento:
+**2. Sincronize as dependências**, incluindo o PyInstaller, que já está declarado no grupo de desenvolvimento:
 
 ```powershell
-uv add --dev pyinstaller
+uv sync --group dev
 ```
 
-**3. Gere o executável** a partir do arquivo de entrada `iniciar.py`:
+**3. Prepare a receita de empacotamento**, caso o arquivo `PDF Anonymizer.spec` ainda não exista. Ele é local e não é versionado:
 
 ```powershell
-uv run pyinstaller iniciar.py --name "PDF Anonymizer" --windowed --onedir --paths src --add-data "vendor\tesseract;tesseract" --clean --noconfirm
+uv run pyi-makespec main.py --name "PDF Anonymizer" --windowed --onedir --paths src --add-data "vendor\tesseract;tesseract"
 ```
 
-O resultado fica em `dist\PDF Anonymizer\`. Nas próximas vezes, basta usar a receita salva no arquivo `.spec`:
+**4. Gere o executável** com o script de build:
 
 ```powershell
-uv run pyinstaller "PDF Anonymizer.spec" --clean --noconfirm
+.\build.ps1
 ```
 
-O PyInstaller inclui apenas o código importado a partir de `iniciar.py` e os arquivos indicados com `--add-data`. As pastas `data/` e `scripts/` não entram no executável.
+O script usa o Python de `.venv`, verifica a presença do idioma português do Tesseract e executa o PyInstaller com `--clean --noconfirm`. Durante a geração, restringe o `PATH` ao ambiente virtual e às pastas do Windows, restaurando-o ao terminar. Isso evita incluir DLLs incompatíveis de outras ferramentas, que podem causar o erro `DLL load failed while importing QtCore` ao abrir o programa.
 
-**4. Teste** o `PDF Anonymizer.exe` com um PDF de texto comum e com um PDF escaneado, para confirmar que o OCR funciona. O teste definitivo é em um computador sem Python e sem Tesseract instalados. Se o programa fechar sem mostrar nada, gere de novo sem a opção `--windowed` para ver a mensagem de erro no terminal.
+O resultado fica em:
 
-**5. Distribua** compactando a pasta `dist\PDF Anonymizer` inteira em um `.zip`.
+```text
+dist/
+└── PDF Anonymizer/
+    ├── PDF Anonymizer.exe
+    └── _internal/          # Bibliotecas, Qt e Tesseract
+```
+
+O PyInstaller inclui apenas o código importado a partir de `main.py` e os arquivos indicados com `--add-data`. As pastas `data/` e `scripts/` não entram no executável.
+
+**5. Valide o pacote.** Abra `dist\PDF Anonymizer\PDF Anonymizer.exe` e confira se a interface aparece. Verifique também se o Tesseract empacotado encontra o português (`por`):
+
+```powershell
+& ".\dist\PDF Anonymizer\_internal\tesseract\tesseract.exe" --tessdata-dir ".\dist\PDF Anonymizer\_internal\tesseract\tessdata" --list-langs
+```
+
+Teste a anonimização com um PDF de texto e com um PDF escaneado, revisando os arquivos gerados. Abrir a janela e listar os idiomas são verificações iniciais e não substituem esse teste. Confira também o funcionamento em um computador sem Python e sem Tesseract instalados.
+
+**6. Distribua** compactando a pasta inteira:
+
+```powershell
+Compress-Archive -LiteralPath ".\dist\PDF Anonymizer" -DestinationPath ".\dist\PDF Anonymizer.zip" -Force
+```
+
+O comando substitui um ZIP anterior com o mesmo nome. Quem receber deve extrair todo o conteúdo e manter o `.exe` ao lado de `_internal`.
 
 Como o executável não tem assinatura digital, o Windows SmartScreen e alguns antivírus podem desconfiar dele. Se a empresa tiver equipe de TI, vale pedir a liberação ou a assinatura do executável.
 
@@ -184,13 +209,14 @@ pdf-anonymizer/
 │   └── pdf_anonymizer/
 │       ├── __init__.py
 │       ├── anonymizer.py  # Extração de texto, OCR, busca e redação
-│       ├── new_gui.py     # Interface gráfica (Tkinter)
-│       ├── gui.py         # Interface anterior, não usada pelo programa
+│       ├── gui_qt.py      # Interface padrão (PySide6 / Qt)
+│       ├── gui_tkinter.py # Interface anterior (--gui=antiga)
 │       └── main.py        # Ponto de entrada; abre a interface
 ├── vendor/
 │   └── tesseract/         # Cópia do Tesseract para o executável (não versionado)
 ├── main.py                # Arquivo de entrada usado pelo PyInstaller
-├── PDF Anonymizer.spec    # Receita do build do PyInstaller
+├── build.ps1              # Geração com PATH restrito para evitar conflitos de DLLs
+├── PDF Anonymizer.spec    # Receita local do PyInstaller (não versionada)
 ├── pyproject.toml
 ├── uv.lock
 └── README.md
